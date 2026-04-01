@@ -1,0 +1,30 @@
+# Environment variables (never commit)
+.env
+.env.local
+.env.production
+*.env
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Generated output files
+outputs/*
+!outputs/.gitkeep
+
+# Google service account (if stored as file)
+service_account.json
+
+# Python (legacy — no longer used)
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db

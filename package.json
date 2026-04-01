@@ -1,0 +1,19 @@
+{
+  "name": "faq-formatter",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "docx": "^8.5.0",
+    "googleapis": "^140.0.0",
+    "next": "^16.2.1",
+    "uuid": "^10.0.0",
+    "xlsx": "0.18.5"
+  }
+}
