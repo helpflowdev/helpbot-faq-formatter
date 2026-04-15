@@ -10,18 +10,15 @@ export async function POST(request) {
     if (!file) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 });
     }
-    if (!file.name.endsWith('.xlsx')) {
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
       return NextResponse.json(
-        { error: 'Invalid file type. Please upload a .xlsx file.' },
+        { error: 'Invalid file type. Please upload a .xlsx or .csv file.' },
         { status: 400 }
       );
     }
-    if (!clientCode) {
-      return NextResponse.json({ error: 'Client Code is required.' }, { status: 400 });
-    }
-
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = parseExcel(buffer, file.name, clientCode);
+    const result = parseExcel(buffer, file.name, clientCode || 'DEFAULT');
     return NextResponse.json(result);
   } catch (e) {
     const isUserError = /column|empty|valid|required/i.test(e.message);

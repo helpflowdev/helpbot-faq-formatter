@@ -2,6 +2,7 @@ import { extractAnswers } from '@/lib/extractor';
 import { generateOutputs } from '@/lib/generator';
 import { uploadToDrive } from '@/lib/uploader';
 import { sendSlackNotification } from '@/lib/notifier';
+import fs from 'fs';
 
 // Allow long-running pipeline (Claude API + Drive upload)
 export const maxDuration = 300;
@@ -33,7 +34,7 @@ export async function GET(request) {
 
         // Stage 4: Generate output files via Claude
         send({ stage: 'Generating Doc-Style Output', step: 4 });
-        const outputFiles = await generateOutputs(sessionId, faqs, needsReview);
+        const { outputFiles, formattedFaqs } = await generateOutputs(sessionId, faqs, needsReview);
 
         // Stage 5: Upload to Drive (skipped if GOOGLE_DRIVE_FOLDER_ID is not set)
         send({ stage: 'Uploading to Google Drive', step: 5 });
@@ -56,6 +57,20 @@ export async function GET(request) {
           slackResult = await sendSlackNotification(sessionId, faqs, needsReview, driveResult);
         }
 
+        // Read the generated TXT output to send to the client for preview
+        let faqTextOutput = '';
+        if (outputFiles.txt) {
+          try {
+            faqTextOutput = fs.readFileSync(outputFiles.txt, 'utf8');
+          } catch { /* non-critical — preview just won't be available */ }
+        }
+
+        // Structured FAQ entries for the rich text preview
+        const faqEntries = formattedFaqs.map(faq => ({
+          title: faq.title,
+          answer: faq.answer,
+        }));
+
         // Done
         send({
           stage: 'complete',
@@ -65,6 +80,13 @@ export async function GET(request) {
           driveFolderUrl: driveResult.folderUrl,
           docUrl: driveResult.docUrl,
           slackError: slackResult.success ? null : slackResult.error,
+          faqTextOutput,
+          faqEntries,
+          needsReviewEntries: needsReview.map(item => ({
+            title: item.title,
+            reason: item.reason,
+            source: item.source,
+          })),
         });
       } catch (e) {
         send({ error: `Unexpected error: ${e.message}` });

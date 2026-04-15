@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const TOTAL_STEPS = 7;
 
@@ -28,15 +28,34 @@ export default function Home() {
   const [sessionId, setSessionId] = useState(null);
   const [fileStats, setFileStats] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [clientCode, setClientCode] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [processingError, setProcessingError] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [stageStates, setStageStates] = useState({});  // { stepNum: 'active' | 'done' }
+  const [stageStates, setStageStates] = useState({});
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [dark, setDark] = useState(false);
+  const [resultsTab, setResultsTab] = useState('processed');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark') {
+      setDark(true);
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, []);
+
+  function toggleTheme() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light');
+    localStorage.setItem('theme', next ? 'dark' : 'light');
+  }
 
   const fileInputRef = useRef(null);
-  const clientCodeRef = useRef(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -48,24 +67,14 @@ export default function Home() {
     setProgress(Math.round((step / TOTAL_STEPS) * 100));
   }
 
-  // ── Upload ───────────────────────────────────────────────────────────────
+  // ── Upload (triggered when both file + client code are ready) ───────────
 
-  async function handleFile(file) {
+  const tryUpload = useCallback(async (file, code) => {
+    if (!file || !code) return;
+
     setUploadError('');
     setFileStats(null);
-
-    if (!file.name.endsWith('.xlsx')) {
-      setUploadError('Invalid file type. Please upload a .xlsx file.');
-      return;
-    }
-
-    const code = clientCodeRef.current?.value.trim();
-    if (!code) {
-      setUploadError('Please enter a Client Code before uploading.');
-      return;
-    }
-
-    setSelectedFile(file);
+    setUploading(true);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -77,7 +86,7 @@ export default function Home() {
 
       if (!res.ok || data.error) {
         setUploadError(data.error || 'Upload failed.');
-        setSelectedFile(null);
+        setUploading(false);
         return;
       }
 
@@ -85,7 +94,30 @@ export default function Home() {
       setFileStats(data);
     } catch {
       setUploadError('Could not reach the server. Please try again.');
-      setSelectedFile(null);
+    } finally {
+      setUploading(false);
+    }
+  }, []);
+
+  function handleFile(file) {
+    setUploadError('');
+    setFileStats(null);
+
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.xlsx') && !name.endsWith('.csv')) {
+      setUploadError('Invalid file type. Please upload a .xlsx or .csv file.');
+      return;
+    }
+
+    setSelectedFile(file);
+    tryUpload(file, clientCode.trim());
+  }
+
+  function handleClientCodeChange(value) {
+    setClientCode(value);
+    const trimmed = value.trim();
+    if (trimmed && selectedFile && !fileStats) {
+      tryUpload(selectedFile, trimmed);
     }
   }
 
@@ -140,59 +172,78 @@ export default function Home() {
 
   // ── Screens ──────────────────────────────────────────────────────────────
 
+  const themeButton = (
+    <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+      {dark ? '\u2600' : '\u263E'}
+    </button>
+  );
+
   if (screen === 'upload') {
     return (
       <main className="container">
+        {themeButton}
         <div className="card">
-          <h1>FAQ Stress Tester</h1>
-          <p className="subtitle">Upload your FAQ Excel file to begin processing.</p>
-
-          <div className="field">
-            <label htmlFor="client-code">Client Code</label>
-            <input
-              type="text"
-              id="client-code"
-              ref={clientCodeRef}
-              placeholder="e.g. ACME"
-              autoComplete="off"
-            />
+          <div className="card-header">
+            <h1>FAQ Stress Tester</h1>
+            <p className="subtitle">Upload your FAQ Excel file to begin processing.</p>
           </div>
 
-          <div
-            className={`drop-zone${dragOver ? ' drag-over' : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const file = e.dataTransfer.files[0];
-              if (file) handleFile(file);
-            }}
-          >
-            {selectedFile ? selectedFile.name : 'Drag & drop your .xlsx file here\nor click to browse'}
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept=".xlsx"
-              style={{ display: 'none' }}
-              onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
-            />
+          <div className="upload-fields">
+            <div className="field">
+              <label htmlFor="client-code">Client Code</label>
+              <input
+                type="text"
+                id="client-code"
+                value={clientCode}
+                onChange={(e) => handleClientCodeChange(e.target.value)}
+                placeholder="e.g. ACME"
+                autoComplete="off"
+              />
+            </div>
+
+            <div
+              className={`drop-zone${dragOver ? ' drag-over' : ''}${selectedFile ? ' has-file' : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files[0];
+                if (file) handleFile(file);
+              }}
+            >
+              {selectedFile ? (
+                <span className="file-name">{selectedFile.name}</span>
+              ) : (
+                <>
+                  <span className="drop-icon">+</span>
+                  <span>Drag & drop your .xlsx or .csv file here or click to browse</span>
+                </>
+              )}
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".xlsx,.csv"
+                style={{ display: 'none' }}
+                onChange={(e) => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
+              />
+            </div>
           </div>
+
+          {uploading && (
+            <div className="upload-status">Parsing file...</div>
+          )}
 
           {fileStats && (
             <div className="file-stats">
               <div className="stat">
-                <span className="stat-label">File</span>
-                <span>{fileStats.filename}</span>
-              </div>
-              <div className="stat">
+                <span className="stat-num">{fileStats.totalRows}</span>
                 <span className="stat-label">Total Rows</span>
-                <span>{fileStats.totalRows}</span>
               </div>
               <div className="stat">
+                <span className="stat-num">{fileStats.totalFaqs}</span>
                 <span className="stat-label">FAQs Detected</span>
-                <span>{fileStats.totalFaqs}</span>
               </div>
             </div>
           )}
@@ -212,8 +263,9 @@ export default function Home() {
   if (screen === 'processing') {
     return (
       <main className="container">
+        {themeButton}
         <div className="card">
-          <h2>Processing your FAQs…</h2>
+          <h2>Processing your FAQs...</h2>
 
           <div className="progress-wrapper">
             <div className="progress-bar-track">
@@ -243,7 +295,8 @@ export default function Home() {
 
   // Results screen
   return (
-    <main className="container">
+    <main className="container container-wide">
+      {themeButton}
       <div className="card">
         <div className="success-badge">Processing Complete</div>
 
@@ -252,40 +305,103 @@ export default function Home() {
             <span className="summary-num">{results?.total ?? '—'}</span>
             <span className="summary-label">Total FAQs</span>
           </div>
-          <div className="summary-item">
+          <div
+            className={`summary-item clickable${resultsTab === 'processed' ? ' active' : ''}`}
+            onClick={() => setResultsTab('processed')}
+          >
             <span className="summary-num">{results?.processed ?? '—'}</span>
             <span className="summary-label">Processed</span>
           </div>
-          <div className="summary-item">
+          <div
+            className={`summary-item clickable${resultsTab === 'review' ? ' active' : ''}`}
+            onClick={() => setResultsTab('review')}
+          >
             <span className="summary-num">{results?.flagged ?? '—'}</span>
             <span className="summary-label">Needs Review</span>
           </div>
         </div>
 
-        <div className="action-buttons">
-          <a
-            className="btn-primary"
-            href={`/api/download/${sessionId}/FAQ_DocStyle_Output.docx`}
-            download
-          >
-            Download Doc Output
-          </a>
-          <a
-            className="btn-secondary"
-            href={`/api/download/${sessionId}/FAQ_Needs_Review.xlsx`}
-            download
-          >
-            Download Needs Review
-          </a>
-          <a
-            className="btn-outline"
-            href={results?.driveFolderUrl || '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open Drive Folder
-          </a>
-        </div>
+        {resultsTab === 'processed' && (
+          <>
+            <div className="action-buttons">
+              <a
+                className="btn-primary"
+                href={`/api/download/${sessionId}/FAQ_DocStyle_Output.docx`}
+                download
+              >
+                Download Doc Output
+              </a>
+            </div>
+
+            {results?.faqEntries?.length > 0 && (
+              <div className="output-preview">
+                <div className="output-preview-header">
+                  <h3>FAQ Output</h3>
+                  <button
+                    className="btn-copy"
+                    onClick={() => {
+                      const el = document.getElementById('faq-editor');
+                      if (!el) return;
+                      const range = document.createRange();
+                      range.selectNodeContents(el);
+                      const sel = window.getSelection();
+                      sel.removeAllRanges();
+                      sel.addRange(range);
+                      document.execCommand('copy');
+                      sel.removeAllRanges();
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                  >
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <div
+                  id="faq-editor"
+                  className="output-editor"
+                  contentEditable
+                  suppressContentEditableWarning
+                >
+                  {results.faqEntries.map((entry, i) => {
+                    const paragraphs = entry.answer.split('\n\n').map(p => p.trim()).filter(Boolean);
+                    return (
+                      <div key={i}>
+                        <h1>{entry.title}</h1>
+                        {paragraphs.map((p, j) => (
+                          <p key={j}>{p}</p>
+                        ))}
+                        {i < results.faqEntries.length - 1 && <br />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {resultsTab === 'review' && (
+          <div className="output-preview">
+            <div className="output-preview-header">
+              <h3>Items Flagged for Review</h3>
+            </div>
+            <div className="review-list">
+              {results?.needsReviewEntries?.length > 0 ? (
+                results.needsReviewEntries.map((item, i) => (
+                  <div key={i} className="review-item">
+                    <h3 className="review-title">{item.title}</h3>
+                    <div className="review-meta">
+                      <span className="review-reason">{item.reason}</span>
+                      <span className="review-source">Source: {item.source}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="review-empty">No items flagged for review.</div>
+              )}
+            </div>
+          </div>
+        )}
 
         {results?.slackError && (
           <div className="warning-msg">Slack notification failed: {results.slackError}</div>

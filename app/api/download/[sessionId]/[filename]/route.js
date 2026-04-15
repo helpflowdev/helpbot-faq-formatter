@@ -4,7 +4,7 @@ import fs from 'fs';
 const OUTPUTS_DIR = path.join(process.cwd(), 'outputs');
 
 export async function GET(request, { params }) {
-  const { sessionId, filename } = params;
+  const { sessionId, filename } = await params;
 
   // Prevent path traversal
   const safeSession = path.basename(sessionId);
