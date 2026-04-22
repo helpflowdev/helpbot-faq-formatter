@@ -85,6 +85,18 @@ For each FAQ row, apply the following priority order:
    mark as Needs Review
    exclude from Doc output
 
+Status-Based Exclusion (checked first, before extraction)
+
+If the Status column contains any of the following (case-insensitive, substring match):
+  "Archived"
+  "Submitted"
+  "Suggested"
+
+→ MUST:
+  skip extraction entirely
+  add to Needs Review with reason = "Status: <value> — excluded from output"
+  type = "other"
+
 Internal Content Detection
 
 Check the General guidance column ONLY.
@@ -96,6 +108,86 @@ If General guidance begins with any of the following (case-insensitive):
 → MUST:
   exclude from Doc output
   add to Needs Review file with reason = "Internal content"
+  type = "other"
+
+7a. RTO / Escalation Routing
+
+After an answer is extracted, classify the FAQ as RTO, Escalation, or Normal:
+
+  RTO → Status column equals "RTO" (case-insensitive)
+
+  Escalation → answer text (lowercased) contains any of:
+    "gather details"
+    "gather information"
+    "escalat"
+    "raise a case"
+    "raise a ticket"
+    "create a case"
+    "create a ticket"
+    "follow up with you"
+
+  Normal → everything else
+
+Routing:
+  Normal → main Doc output (standard rewrite)
+  RTO → Needs Review, type = "rto", still generates a 2-paragraph response
+  Escalation → Needs Review, type = "escalation", still generates a 2-paragraph response
+
+RTO takes precedence over Escalation if both are detected.
+
+7b. Order-Related vs Pre-Sales Detection (RTO / Escalation only)
+
+For RTO and Escalation items, determine whether the FAQ is tied to an existing
+order or is a pre-sales question. This determines which response prompt is used.
+
+Match keywords (case-insensitive) in BOTH the Title AND the source answer text:
+
+  Order-related keywords:
+    "my order", "order number", "order #", "tracking number", "tracking",
+    "delivered", "shipment status", "where is my", "cancel order",
+    "modify order", "change order", "return", "refund", "exchange",
+    "warranty", "replace item", "replacement"
+
+  If ANY order-related keyword appears in title OR answer → Order-Related
+  Otherwise → Pre-Sales
+
+Response prompt selection:
+  Order-Related → ESCALATION_PROMPT (asks for email first, then complete name)
+  Pre-Sales → CONSENT_PROMPT (uses verbatim consent phrase — see Section 10a)
+
+7c. Category Classification (ALL FAQs)
+
+Every FAQ — processed, RTO, Escalation, AND Other-type Needs Review items —
+must be classified into exactly ONE of these fixed categories so the final
+output can be grouped consistently:
+
+  1.  Company Details
+  2.  Ordering and Checkout
+  3.  Order Status
+  4.  Stock and Supply Inquiry
+  5.  Returns, Refunds, Exchanges, and Warranties
+  6.  Shipping Information
+  7.  Competitor Comparison
+  8.  Discounts and Promotions
+  9.  Rewards and Affiliate Program
+  10. Product Information
+  11. Product Recommendation
+  12. Account and Subscription
+  13. Wholesale
+  14. Order Cancellation / Modification / Tracking
+  15. Do you sell? Do you have?
+  16. Services
+  17. Installation / Guide
+  18. Technical Queries
+  19. Miscellaneous
+  20. OTHERS (fallback if none fit)
+
+Classification rules:
+  Use the FAQ Title as primary signal. If title is ambiguous (< 5 words)
+  include the first 150 characters of the source answer.
+  Classify in BATCHES of up to 20 FAQs per OpenAI call to save tokens.
+  If the returned label is not in the fixed list above → default to "OTHERS".
+  Categories with zero FAQs after classification are omitted from the output.
 
 8. Processing UI
 
@@ -138,6 +230,17 @@ Rules:
   Exactly two paragraphs per answer
   One blank line between FAQ entries
 
+9a. Category Grouping (main Doc output)
+
+The main Doc output MUST be grouped by category:
+
+  - Each category appears as a Heading 1 (category name, no numbering)
+  - Within each category, FAQs appear in source-file order
+  - Categories appear in the fixed order listed in Section 7c
+  - Categories with zero FAQs are skipped (not rendered)
+
+This applies to both FAQ_DocStyle_Output.docx and FAQ_DocStyle_Output.txt.
+
 10. Tone Enforcement
 
 Each answer must include ALL of the following components:
@@ -158,21 +261,69 @@ Validation Rules:
   Do NOT invent timelines
   Do NOT remove required qualifiers
 
+10a. Escalation Response Prompts (RTO / Escalation only)
+
+Two prompts are used, selected by the Order-Related vs Pre-Sales check in §7b.
+
+ESCALATION_PROMPT (Order-Related — customer has an existing order on file):
+  Paragraph 1: Warm acknowledgment + empathy + reassurance that the team will
+               look into this personally.
+  Paragraph 2: Ask the customer to provide their email address (first) and
+               their complete name so the team can follow up directly.
+  Do NOT promise a specific timeline or resolution.
+
+CONSENT_PROMPT (Pre-Sales — no existing order, personal info consent required):
+  Paragraph 1: Warm acknowledgment + reassurance that the team will personally
+               help with their inquiry.
+  Paragraph 2: MUST contain this exact verbatim sentence (no paraphrasing):
+
+    "In order to process your request, we will need to ask for your personal
+    information such as your email address, and/or phone number. We will only
+    use this information to handle your request and for no other purposes
+    unless you give us your specific consent separately. Please type
+    \"I Agree\" in the chat so we can proceed."
+
+  No timelines, no commitments, no additional policy content.
+
 11. Outputs
 
 Primary Output
   FAQ_DocStyle_Output.docx
   FAQ_DocStyle_Output.txt
 
+Both files MUST be structured as:
+
+  Section A — PROCESSED FAQs
+    Grouped by category (fixed order, §7c). Each category shown as Heading 1.
+    Within a category, each FAQ: title + 2-paragraph response.
+
+  Section B — NEEDS REVIEW
+    Separator line, then three sub-sections in this order:
+
+      1. NEEDS REVIEW — RTO
+         Grouped by category. Each FAQ: title + generated 2-paragraph response.
+      2. NEEDS REVIEW — ESCALATION
+         Grouped by category. Each FAQ: title + generated 2-paragraph response.
+      3. NEEDS REVIEW — OTHER
+         Grouped by category. Each FAQ: title + reason + original source
+         (no generated response for this group).
+
 Secondary Output
   FAQ_Needs_Review.xlsx
-  Columns:
+  Columns (in this order):
     FAQ Title
+    Type                 (RTO | Escalation | Other)
+    Category             (one of the fixed 20)
     Reason Flagged
     Original Extracted Answer Source
+    Generated Response   (blank for type = Other)
+
+  Row order: RTO rows first, then Escalation, then Other.
+  Within each type, rows are grouped by category in the fixed order.
 
 Optional (Dev Only)
   FAQ_Validation_Report.csv
+  Adds columns: Category, Type
 
 12. Google Drive
 
@@ -252,7 +403,17 @@ System is complete when:
 ✅ Client Code input collected before processing
 ✅ Columns auto-detected correctly
 ✅ Extraction logic works in correct priority order
+✅ Status-based exclusion (Archived / Submitted / Suggested) routes to Needs Review
 ✅ Internal content (General guidance column) detected and excluded
+✅ RTO (Status column) routes to Needs Review, still generates a 2-paragraph response
+✅ Escalation (keyword match in answer) routes to Needs Review, still generates a response
+✅ Order-Related vs Pre-Sales detection selects the correct prompt
+✅ Consent phrase appears verbatim (no paraphrasing) in Pre-Sales escalations
+✅ Every FAQ with a generated response is classified into one of the 20 fixed categories
+✅ Classification is batched (up to 20 per OpenAI call) to save tokens
+✅ Rewrites run in parallel (concurrency ≤ 5) to reduce wall-clock time
+✅ Main Doc output is grouped by category (fixed order, empty categories skipped)
+✅ Needs Review is sectioned: RTO → Escalation → Other, each grouped by category
 ✅ Output format strictly followed (2 paragraphs, no labels, no metadata)
 ✅ Tone rules enforced (acknowledgment + reassurance always present)
 ✅ All files generated correctly
@@ -272,3 +433,9 @@ Large Excel files (100+ rows)
 Client Code missing or blank (must block processing)
 Slack/Drive partial failures
 Reply X text exists but Condition X is not GENERAL and not blank
+RTO status with an otherwise-valid answer (route to Needs Review, still generate response)
+Escalation keyword appears in a pre-sales context (use consent phrase)
+Escalation keyword appears in an order-tracking context (use email+name ask)
+Classification batch returns a label not in the fixed list (default to OTHERS)
+Category returned for an item has zero total members (still rendered if any item lands there)
+Both RTO and Escalation triggers match on the same FAQ (RTO takes precedence)

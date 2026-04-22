@@ -72,9 +72,39 @@ FAQ Formatter/
 3. Else use **General guidance** if: not empty AND does NOT start with an internal marker
 4. Else: mark as **Needs Review**, exclude from output
 
+### Status-Based Exclusion (checked before extraction):
+- If Status contains `Archived`, `Submitted`, or `Suggested` (case-insensitive, substring):
+  - Skip extraction entirely
+  - Add to Needs Review, `type = "other"`, reason = `"Status: <value> — excluded from output"`
+
 ### Internal Content Detection (General guidance column only):
 - Flag if General guidance starts with: `INTERNAL`, `NOT FOR CUSTOMER`, or similar
-- Must: exclude from Doc output, add to Needs Review file
+- Must: exclude from Doc output, add to Needs Review, `type = "other"`
+
+### RTO / Escalation Routing (after extraction):
+- **RTO** → Status column equals `"RTO"` (case-insensitive)
+- **Escalation** → answer text contains any of: `gather details`, `gather information`, `escalat`, `raise a case`, `raise a ticket`, `create a case`, `create a ticket`, `follow up with you`
+- RTO takes precedence if both match
+- Both route to **Needs Review** (not main output), but STILL generate a 2-paragraph response
+- `type = "rto"` or `"escalation"`
+
+### Order-Related vs Pre-Sales (RTO / Escalation only):
+Keyword match in BOTH title AND source answer (case-insensitive):
+- Order-related keywords: `my order`, `order number`, `order #`, `tracking number`, `tracking`, `delivered`, `shipment status`, `where is my`, `cancel order`, `modify order`, `change order`, `return`, `refund`, `exchange`, `warranty`, `replace item`, `replacement`
+- **Order-Related** → use `ESCALATION_PROMPT` (ask for email first, then complete name)
+- **Pre-Sales** → use `CONSENT_PROMPT` (consent phrase, verbatim)
+
+### Consent Phrase (verbatim, no paraphrasing):
+> "In order to process your request, we will need to ask for your personal information such as your email address, and/or phone number. We will only use this information to handle your request and for no other purposes unless you give us your specific consent separately. Please type \"I Agree\" in the chat so we can proceed."
+
+### Category Classification (fixed 20, fallback OTHERS):
+Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, Returns/Refunds/Exchanges/Warranties, Shipping Information, Competitor Comparison, Discounts and Promotions, Rewards and Affiliate Program, Product Information, Product Recommendation, Account and Subscription, Wholesale, Order Cancellation/Modification/Tracking, Do you sell? Do you have?, Services, Installation/Guide, Technical Queries, Miscellaneous, OTHERS.
+- Classify every FAQ with a generated response (main output + RTO/Escalation)
+- **Batch up to 20 per OpenAI call** to save tokens
+- Use title as primary signal; include first 150 chars of answer only if title is ambiguous (< 5 words)
+
+### Performance:
+- Rewrites run in parallel with **concurrency limit of 5** (preserve original order in output)
 
 ### Tone Rules (every answer must have):
 - Acknowledgment (always required)
@@ -89,11 +119,13 @@ FAQ Formatter/
 - Exactly 2 paragraphs per answer (no more, no less)
 - No "Q:" / "A:", no numbering, no markdown, no labels, no metadata
 - One blank line between FAQ entries
+- **Main output grouped by category** (fixed 20 order, skip empty categories)
+- **Needs Review sectioned in this order:** RTO → Escalation → Other (each grouped by category)
 - Files to generate:
   - `FAQ_DocStyle_Output.docx`
   - `FAQ_DocStyle_Output.txt`
-  - `FAQ_Needs_Review.xlsx` (columns: FAQ Title, Reason Flagged, Original Extracted Answer Source)
-  - `FAQ_Validation_Report.csv` (dev/internal only)
+  - `FAQ_Needs_Review.xlsx` (columns: FAQ Title, Type, Category, Reason Flagged, Original Extracted Answer Source, Generated Response)
+  - `FAQ_Validation_Report.csv` (dev/internal only — adds Category, Type columns)
 
 ---
 

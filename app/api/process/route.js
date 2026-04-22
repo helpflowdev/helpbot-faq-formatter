@@ -65,10 +65,12 @@ export async function GET(request) {
           } catch { /* non-critical — preview just won't be available */ }
         }
 
-        // Structured FAQ entries for the rich text preview
+        // Structured FAQ entries for the rich text preview — use the rewritten
+        // 2-paragraph text (formattedAnswer), not the raw source (answer).
         const faqEntries = formattedFaqs.map(faq => ({
           title: faq.title,
-          answer: faq.answer,
+          answer: faq.formattedAnswer,
+          category: faq.category,
         }));
 
         // Done
@@ -86,6 +88,9 @@ export async function GET(request) {
             title: item.title,
             reason: item.reason,
             source: item.source,
+            type: item.type,
+            category: item.category,
+            generatedAnswer: item.formattedAnswer || null,
           })),
         });
       } catch (e) {
