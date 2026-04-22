@@ -182,12 +182,27 @@ output can be grouped consistently:
   19. Miscellaneous
   20. OTHERS (fallback if none fit)
 
-Classification rules:
-  Use the FAQ Title as primary signal. If title is ambiguous (< 5 words)
-  include the first 150 characters of the source answer.
-  Classify in BATCHES of up to 20 FAQs per OpenAI call to save tokens.
-  If the returned label is not in the fixed list above → default to "OTHERS".
-  Categories with zero FAQs after classification are omitted from the output.
+Classification rules (applied in this order):
+
+  1. Tags fast-path (no LLM call — saves tokens):
+     Check the Tags column (column M). If it contains a fixed-category name
+     (substring match, case-insensitive) pick that category directly. When
+     multiple match, the longest category name wins (most specific).
+
+     If no full category name is contained, split Tags on comma/semicolon/pipe
+     and check each segment (length ≥ 5) — if exactly one category contains
+     the segment, pick that category. Example: Tags = "shipping" uniquely
+     matches "Shipping Information".
+
+  2. LLM batch classify (for items that did NOT fast-path):
+     Call OpenAI in batches of up to 20 items. Each item sends:
+        Title (always — primary signal)
+        Tags (column M) when present
+        Keywords (column I) when present
+        First 150 chars of the source answer ONLY when Title is < 5 words
+
+  3. Fallback: if the LLM returns a label not in the fixed list → "OTHERS".
+  4. Categories with zero FAQs after classification are omitted from output.
 
 8. Processing UI
 

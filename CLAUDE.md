@@ -99,9 +99,10 @@ Keyword match in BOTH title AND source answer (case-insensitive):
 
 ### Category Classification (fixed 20, fallback OTHERS):
 Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, Returns/Refunds/Exchanges/Warranties, Shipping Information, Competitor Comparison, Discounts and Promotions, Rewards and Affiliate Program, Product Information, Product Recommendation, Account and Subscription, Wholesale, Order Cancellation/Modification/Tracking, Do you sell? Do you have?, Services, Installation/Guide, Technical Queries, Miscellaneous, OTHERS.
-- Classify every FAQ with a generated response (main output + RTO/Escalation)
-- **Batch up to 20 per OpenAI call** to save tokens
-- Use title as primary signal; include first 150 chars of answer only if title is ambiguous (< 5 words)
+- Classify every FAQ (all types — normal, RTO, Escalation, Other)
+- **Tags fast-path FIRST (no LLM):** if Tags (column M) contains a fixed-category name (longest match wins) OR a tag segment uniquely matches one category, pick that directly
+- **Only items that don't fast-path go to the LLM.** Batch up to 20 per call
+- LLM prompt includes: Title (always), Tags (when present), Keywords (column I, when present), and a 150-char answer snippet only when title has < 5 words
 
 ### Performance:
 - Rewrites run in parallel with **concurrency limit of 5** (preserve original order in output)
