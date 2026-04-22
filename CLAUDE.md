@@ -129,9 +129,9 @@ Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, 
 
 ---
 
-## Environment Variables (required in .env)
+## Environment Variables (required in .env.local)
 ```
-ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
 SLACK_WEBHOOK_URL=
 GOOGLE_DRIVE_FOLDER_ID=
 GOOGLE_SERVICE_ACCOUNT_JSON=
