@@ -313,6 +313,58 @@ Escalations where the Reply ITSELF carries the escalation language
 (e.g., "please raise a ticket") are NOT push-back — they still route to
 Needs Review → Escalation for human vetting (§7a).
 
+7f. Multi-FAQ Row Extraction (one spreadsheet row → many customer FAQs)
+
+Some spreadsheet rows encode a FAQ container that holds multiple distinct
+customer questions as Conditions. Example pattern from the source data:
+
+  Title:       Shipping FAQ                    (container label)
+  Reply 1:     Standard shipping times…
+  Condition 1: HOW LONG DOES THE SHIPPING TAKE?   (customer question)
+  Reply 2:     Yes. We can ship internationally.
+  Condition 2: CAN YOU SHIP INTERNATIONALLY?
+  Guidance 2:  INTERNAL For other international orders… gather details and RTO.
+  Reply 3:     Yes, some products have lead time.
+  Condition 3: IS THERE A MANUFACTURING LEAD TIME?
+  …
+
+Detection:
+  A row is MULTI-FAQ mode when ANY Condition X is present AND does NOT
+  match the "blank or contains GENERAL" test used by §7 step 1.
+
+  Otherwise the row is SINGLE-FAQ mode and §7 applies unchanged (row Title
+  is the FAQ title, answer resolved via the 4-step priority).
+
+Multi-FAQ emission (one item per non-empty slot):
+  For every (Reply X, Condition X, Guidance X) slot that has any content:
+
+    - Condition X is a specific customer question AND Reply X is non-empty
+      → sub-FAQ with Condition X as the title, Reply X as the answer,
+        Guidance X as the internal agent note.
+
+    - Condition X is a specific customer question AND Reply X is EMPTY
+      → Needs Review → Other with:
+          title  = Condition X
+          reason = "No customer-facing answer available"
+          internalNote = Guidance X + row-level General guidance
+          source = "Reply X"
+      (Option 1: transparency — these show in the review file rather than
+      being silently dropped.)
+
+    - Condition X blank (or GENERAL) AND Reply X non-empty
+      → sub-FAQ with the row Title as the title (a default / anchor answer
+        inside a multi-FAQ container).
+
+  In multi-FAQ mode the row-level Title is a container label, NOT a
+  customer-facing FAQ title. Sub-FAQs inherit the row's Tags, Keywords,
+  Status, and Category signals.
+
+Per-sub-FAQ escalation / push-back detection:
+  The "associated guidance" for escalation checks is the concatenation of
+  per-slot Guidance X AND the row-level General guidance (either can
+  carry the signal). All other routing rules (§7a, §7b, §7d, §7e) apply
+  unchanged at the sub-FAQ level.
+
 8. Processing UI
 
 Show a visual progress bar with the following labeled stages (in order):
@@ -599,6 +651,9 @@ System is complete when:
 ✅ Push-back pattern emits TWO main-output FAQs (primary + customer-voiced follow-up) when Reply is clean and GG carries an escalation signal
 ✅ Push-back follow-up uses the consent phrase verbatim in paragraph 2; derived title is customer-voiced
 ✅ Push-back inherits the primary's category so both render adjacent in the same section
+✅ Multi-FAQ rows emit one FAQ per non-empty Condition slot (title = Condition, answer = Reply)
+✅ Multi-FAQ rows with an empty Reply but specific Condition route to Needs Review → Other with the Condition as title
+✅ Per-sub-FAQ escalation detection uses Guidance X + row-level General guidance concatenation
 ✅ Output format strictly followed (2 paragraphs, no labels, no metadata)
 ✅ Tone rules enforced (acknowledgment + reassurance always present)
 ✅ All files generated correctly
@@ -630,3 +685,7 @@ No-valid-answer row that has a non-GENERAL Reply 1 → show Reply 1 as Original 
 Status = RTO on a row where Condition blocks extraction → still "No valid answer found", type=other
 Push-back row where LLM response omits the "TITLE:" line → fallback template: "If you need more specific information about <primary title>"
 Push-back row where primary and push-back would naturally classify to different categories → push-back inherits primary's category (keeps them adjacent)
+Multi-FAQ row (e.g., "Shipping FAQ" with 6 specific conditions) → 6 separate sub-FAQs with the Condition text as each title; row Title is a container and NOT rendered
+Multi-FAQ row with mixed blank + specific conditions → blank-condition slots render under row Title, specific-condition slots render under Condition text
+Multi-FAQ row where Condition is specific but Reply X is empty → Needs Review → Other entry with Condition as title, Guidance X as internalNote (Option 1 transparency)
+Per-sub-FAQ Guidance X that contains "gather …details" or "rto" → push-back pattern applies for that specific sub-FAQ, even if siblings in the same row don't

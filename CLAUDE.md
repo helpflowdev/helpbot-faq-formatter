@@ -66,7 +66,20 @@ FAQ Formatter/
 
 ## Critical Logic — Do Not Deviate
 
-### Answer Extraction Priority (strictly in this order):
+### Row-level mode detection (applied FIRST)
+- If **any** `Condition X` on the row is specific (non-blank, non-GENERAL) → **MULTI-FAQ mode**: the row is a container and emits one FAQ per non-empty slot
+- Otherwise → **SINGLE-FAQ mode**: current 4-step priority applies
+
+### Multi-FAQ mode (PRD §7f)
+For each slot (Reply X, Condition X, Guidance X):
+- Specific Condition + non-empty Reply → sub-FAQ: `title = Condition X`, `answer = Reply X`
+- Specific Condition + **empty** Reply → Needs Review → Other with `title = Condition X` (Option 1 transparency — shown, not silently dropped)
+- Blank/GENERAL Condition + non-empty Reply → sub-FAQ with row Title (anchor/default inside a multi-FAQ container)
+- Sub-FAQs inherit row-level Tags, Keywords, Status, Category
+- Per-sub-FAQ escalation/push-back check scans `Guidance X + row-level General guidance` concatenated
+- Row Title is a container label only, NOT a customer-facing FAQ title in multi-FAQ mode
+
+### Single-FAQ mode — Answer Extraction Priority (strictly in this order):
 1. Use **Reply 1** if: not empty AND Condition 1 contains "GENERAL" or is blank
 2. Else use **first Reply X** (1–17) where: not empty AND Condition X contains "GENERAL"
 3. Else use **General guidance** if: not empty AND does NOT start with an internal marker
