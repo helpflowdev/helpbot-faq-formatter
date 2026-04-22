@@ -113,28 +113,49 @@ If General guidance begins with any of the following (case-insensitive):
 
 7a. RTO / Escalation Routing
 
-After an answer is extracted, classify the FAQ as RTO, Escalation, or Normal:
+After an answer is extracted, classify the FAQ as RTO, Escalation, or Normal.
+The escalation scan runs against BOTH the extracted answer AND the General
+guidance column — the INTERNAL agent note often carries the escalation
+signal even when the Reply itself looks like a plain customer answer.
 
   RTO → Status column equals "RTO" (case-insensitive)
 
-  Escalation → answer text (lowercased) contains any of:
-    "gather details"
-    "gather information"
-    "escalat"
-    "raise a case"
-    "raise a ticket"
-    "create a case"
-    "create a ticket"
-    "follow up with you"
+  Escalation (any of the following, case-insensitive, in answer OR General guidance):
 
-  Normal → everything else
+    "Gather …details / info" phrase (regex):
+      /gather\s+(?:all\s+|the\s+|necessary\s+)*(?:details?|info(?:rmation)?)/i
+      (matches "gather details", "gather information",
+       "gather all necessary details", "gather the details", etc.)
+
+    "RTO" as a standalone word (regex):
+      /\brto\b/i
+
+    Substring keywords:
+      "escalat"         (escalate / escalation / etc.)
+      "raise a case"
+      "raise a ticket"
+      "create a case"
+      "create a ticket"
+      "follow up with you"
+
+  Normal → none of the above
 
 Routing:
   Normal → main Doc output (standard rewrite)
   RTO → Needs Review, type = "rto", still generates a 2-paragraph response
-  Escalation → Needs Review, type = "escalation", still generates a 2-paragraph response
+  Escalation → Needs Review, type = "escalation", still generates a response
 
-RTO takes precedence over Escalation if both are detected.
+RTO (status column) takes precedence over Escalation (keyword match) if both fire.
+
+forceConsent flag:
+  When an item matched via the "Gather …details" regex OR the standalone "RTO"
+  regex, the extractor sets forceConsent = true. See §7b for how this flag
+  steers prompt selection.
+
+internalNote:
+  When the escalation trigger came from General guidance (not the Reply), the
+  extractor copies the GG text into an internalNote field so the reviewer
+  sees WHY it was flagged. Surfaces in the Needs Review output and xlsx.
 
 7b. Order-Related vs Pre-Sales Detection (RTO / Escalation only)
 
@@ -152,9 +173,18 @@ Match keywords (case-insensitive) in BOTH the Title AND the source answer text:
   If ANY order-related keyword appears in title OR answer → Order-Related
   Otherwise → Pre-Sales
 
-Response prompt selection:
-  Order-Related → ESCALATION_PROMPT (asks for email first, then complete name)
-  Pre-Sales → CONSENT_PROMPT (uses verbatim consent phrase — see Section 10a)
+Response prompt selection (with §7a forceConsent precedence):
+
+  1. If forceConsent = true (set in §7a — any "Gather …details" or "RTO"
+     keyword fired, in the answer or General guidance) → CONSENT_PROMPT,
+     regardless of order-related detection. GDPR-safe default for any flow
+     that requires collecting fresh PII.
+
+  2. Otherwise, apply the order-related check:
+       Order-Related → ESCALATION_PROMPT (asks for email first, then name).
+         Rationale: the customer already has an order on file, so their
+         info is in the system and no new consent is required under GDPR.
+       Pre-Sales    → CONSENT_PROMPT (verbatim consent phrase, see §10a).
 
 7c. Category Classification (ALL FAQs)
 
@@ -385,6 +415,8 @@ Secondary Output
     Keywords               (from column I)
     Source Column          (e.g. "Reply 1", "General guidance")
     Original Source Text   (the actual text content)
+    Agent Note             (General guidance text when it triggered the
+                            escalation — otherwise blank)
     Generated Response     (blank for Other; "(Agent procedure …)" for
                             refused internal-review items)
 
@@ -480,8 +512,12 @@ System is complete when:
 ✅ Non-procedure internal content is sanitized into a Suggested Response for reviewer comparison
 ✅ RTO (Status column) routes to Needs Review, still generates a 2-paragraph response
 ✅ Escalation (keyword match in answer) routes to Needs Review, still generates a response
-✅ Order-Related vs Pre-Sales detection selects the correct prompt
-✅ Consent phrase appears verbatim (no paraphrasing) in Pre-Sales escalations
+✅ Escalation detection scans BOTH Reply text AND General guidance column
+✅ "Gather …details" phrase and standalone "RTO" word set forceConsent = true
+✅ forceConsent overrides order-related detection → always uses CONSENT_PROMPT
+✅ Order-related escalations (no force) use ESCALATION_PROMPT (email + name)
+✅ Consent phrase appears verbatim (no paraphrasing) in Pre-Sales / forced cases
+✅ When GG triggered the escalation, the GG text surfaces as "Agent Note" in review output
 ✅ Every FAQ is classified into one of the 20 fixed categories
 ✅ Classification is batched (up to 20 per OpenAI call) to save tokens
 ✅ Tags fast-path assigns category without an LLM call when Tags is clean

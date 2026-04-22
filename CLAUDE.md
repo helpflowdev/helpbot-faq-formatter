@@ -88,17 +88,24 @@ FAQ Formatter/
 3. **Output handling:** refused → no Suggested Response, show "Agent procedure — manual review required." Otherwise show Original Source + Suggested Response side-by-side so reviewer compares
 
 ### RTO / Escalation Routing (after extraction):
-- **RTO** → Status column equals `"RTO"` (case-insensitive)
-- **Escalation** → answer text contains any of: `gather details`, `gather information`, `escalat`, `raise a case`, `raise a ticket`, `create a case`, `create a ticket`, `follow up with you`
-- RTO takes precedence if both match
-- Both route to **Needs Review** (not main output), but STILL generate a 2-paragraph response
-- `type = "rto"` or `"escalation"`
+Escalation scan checks **BOTH** the extracted answer AND the General guidance column (GG often carries the escalation signal in an INTERNAL agent note).
 
-### Order-Related vs Pre-Sales (RTO / Escalation only):
-Keyword match in BOTH title AND source answer (case-insensitive):
+- **RTO** → Status column equals `"RTO"` (case-insensitive) — always takes precedence
+- **Escalation** → answer OR General guidance matches any of:
+  - Regex `/gather\s+(?:all\s+|the\s+|necessary\s+)*(?:details?|info(?:rmation)?)/i` (covers `gather details`, `gather all necessary details`, `gather the info`, etc.)
+  - Regex `/\brto\b/i` (standalone "RTO" word in text)
+  - Substrings: `escalat`, `raise a case`, `raise a ticket`, `create a case`, `create a ticket`, `follow up with you`
+- Both route to **Needs Review** (not main output), but STILL generate a 2-paragraph response. `type = "rto"` or `"escalation"`
+- **`forceConsent` flag** (set on the item when `gather …details` regex OR `rto` regex matched): always use CONSENT_PROMPT regardless of order-related check. GDPR-safe default when collecting fresh PII.
+- **`internalNote` field**: when the escalation trigger came from General guidance (not the Reply), the extractor copies GG text here; generator surfaces it as "Agent Note" in the review DOCX/TXT and as an xlsx column.
+
+### Order-Related vs Pre-Sales (RTO / Escalation only, applied AFTER forceConsent):
+If `forceConsent === true` → `CONSENT_PROMPT` (skip the check below).
+
+Otherwise, keyword match in BOTH title AND source answer (case-insensitive):
 - Order-related keywords: `my order`, `order number`, `order #`, `tracking number`, `tracking`, `delivered`, `shipment status`, `where is my`, `cancel order`, `modify order`, `change order`, `return`, `refund`, `exchange`, `warranty`, `replace item`, `replacement`
-- **Order-Related** → use `ESCALATION_PROMPT` (ask for email first, then complete name)
-- **Pre-Sales** → use `CONSENT_PROMPT` (consent phrase, verbatim)
+- **Order-Related** → `ESCALATION_PROMPT` (ask for email first, then complete name). Rationale: customer has an order on file so we already hold their info under their existing consent (GDPR).
+- **Pre-Sales** → `CONSENT_PROMPT` (consent phrase, verbatim)
 
 ### Consent Phrase (verbatim, no paraphrasing):
 > "In order to process your request, we will need to ask for your personal information such as your email address, and/or phone number. We will only use this information to handle your request and for no other purposes unless you give us your specific consent separately. Please type \"I Agree\" in the chat so we can proceed."
@@ -133,7 +140,7 @@ Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, 
 - Files to generate:
   - `FAQ_DocStyle_Output.docx`
   - `FAQ_DocStyle_Output.txt`
-  - `FAQ_Needs_Review.xlsx` columns: `FAQ Title, Type, Category, Reason Flagged, Status, Tags, Keywords, Source Column, Original Source Text, Generated Response`
+  - `FAQ_Needs_Review.xlsx` columns: `FAQ Title, Type, Category, Reason Flagged, Status, Tags, Keywords, Source Column, Original Source Text, Agent Note, Generated Response`
   - `FAQ_Validation_Report.csv` (dev/internal only — adds Category, Type columns)
 
 ---
