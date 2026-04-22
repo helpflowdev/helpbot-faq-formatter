@@ -144,11 +144,12 @@ Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, 
 - **Needs Review sectioned in this order:** RTO → Escalation → Internal Review → Other (each grouped by category; category H2 also centered)
 - **Every Needs Review item shows:** Title, Reason · Status · Tags · Keywords line, Original Source (with actual text), and — where applicable — Suggested Response (or agent-procedure notice)
 - **No auto-Suggested Response for:** Archived, Submitted, Suggested, No-valid-answer (they show original text only so reviewer can decide)
-- Files to generate:
-  - `FAQ_DocStyle_Output.docx`
-  - `FAQ_DocStyle_Output.txt`
-  - `FAQ_Needs_Review.xlsx` columns: `FAQ Title, Type, Category, Reason Flagged, Status, Tags, Keywords, Source Column, Original Source Text, Agent Note, Generated Response`
-  - `FAQ_Validation_Report.csv` (dev/internal only — adds Category, Type columns)
+- Files to generate (each prefixed with sanitized Client Code; empty/missing → `CLIENT`):
+  - `<CLIENT>_FAQ_Formatted.docx`
+  - `<CLIENT>_FAQ_Formatted.txt`
+  - `<CLIENT>_FAQ_Needs_Review.xlsx` columns: `FAQ Title, Type, Category, Reason Flagged, Status, Tags, Keywords, Source Column, Original Source Text, Agent Note, Generated Response`
+  - `<CLIENT>_FAQ_Validation_Report.csv` (dev/internal only — adds Category, Type columns)
+- Client Code sanitization: strip illegal chars, trim, spaces→`_`, collapse repeats, uppercase. e.g. `"My Client #1"` → `MY_CLIENT_1`
 
 ---
 

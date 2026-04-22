@@ -3,6 +3,7 @@ import { generateOutputs } from '@/lib/generator';
 import { uploadToDrive } from '@/lib/uploader';
 import { sendSlackNotification } from '@/lib/notifier';
 import fs from 'fs';
+import path from 'path';
 
 // Allow long-running pipeline (Claude API + Drive upload)
 export const maxDuration = 300;
@@ -75,6 +76,13 @@ export async function GET(request) {
           type: faq.type,
         }));
 
+        // Build filename map for the UI so download links match the
+        // client-prefixed files on disk (e.g. "ABC_FAQ_Formatted.docx").
+        const files = {};
+        for (const [key, fp] of Object.entries(outputFiles)) {
+          if (fp) files[key] = path.basename(fp);
+        }
+
         // Done
         send({
           stage: 'complete',
@@ -86,6 +94,7 @@ export async function GET(request) {
           slackError: slackResult.success ? null : slackResult.error,
           faqTextOutput,
           faqEntries,
+          files,
           needsReviewEntries: needsReview.map(item => ({
             title: item.title,
             reason: item.reason,

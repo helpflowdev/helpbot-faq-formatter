@@ -326,7 +326,7 @@ export default function Home() {
             <div className="action-buttons">
               <a
                 className="btn-primary"
-                href={`/api/download/${sessionId}/FAQ_DocStyle_Output.docx`}
+                href={`/api/download/${sessionId}/${results?.files?.docx ?? 'FAQ_Formatted.docx'}`}
                 download
               >
                 Download Doc Output

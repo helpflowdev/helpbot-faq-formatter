@@ -414,9 +414,31 @@ CONSENT_PROMPT (Pre-Sales — no existing order, personal info consent required)
 
 11. Outputs
 
+Filename convention (ALL generated files)
+
+  Each file is prefixed with a sanitized Client Code so downloads from
+  different runs don't collide:
+
+    <CLIENT>_FAQ_Formatted.docx
+    <CLIENT>_FAQ_Formatted.txt
+    <CLIENT>_FAQ_Needs_Review.xlsx
+    <CLIENT>_FAQ_Validation_Report.csv
+
+  Sanitization rules for <CLIENT>:
+    - Strip all characters except word chars, spaces, and hyphens
+    - Trim, replace spaces with underscores, collapse repeats
+    - Uppercase everything
+    - Empty or missing Client Code → literal "CLIENT"
+
+  Examples:
+    Client Code "ABC"         → ABC_FAQ_Formatted.docx
+    Client Code "rovi"        → ROVI_FAQ_Needs_Review.xlsx
+    Client Code "My Client #1" → MY_CLIENT_1_FAQ_Formatted.docx
+    Client Code "" (missing)   → CLIENT_FAQ_Formatted.docx
+
 Primary Output
-  FAQ_DocStyle_Output.docx
-  FAQ_DocStyle_Output.txt
+  <CLIENT>_FAQ_Formatted.docx
+  <CLIENT>_FAQ_Formatted.txt
 
 Both files MUST be structured as:
 
@@ -451,7 +473,7 @@ Both files MUST be structured as:
          No generated response — these rows are flagged but not rewritten.
 
 Secondary Output
-  FAQ_Needs_Review.xlsx
+  <CLIENT>_FAQ_Needs_Review.xlsx
   Columns (in this order):
     FAQ Title
     Type                   (RTO | Escalation | Internal Review | Other)
@@ -471,7 +493,7 @@ Secondary Output
   Within each type, rows are grouped by category in the fixed order.
 
 Optional (Dev Only)
-  FAQ_Validation_Report.csv
+  <CLIENT>_FAQ_Validation_Report.csv
   Adds columns: Category, Type. Preview note reads "Agent procedure — no
   rewrite" for refused internal-review items.
 
