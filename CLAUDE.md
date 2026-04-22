@@ -78,8 +78,14 @@ FAQ Formatter/
   - Add to Needs Review, `type = "other"`, reason = `"Status: <value> — excluded from output"`
 
 ### Internal Content Detection (General guidance column only):
-- Flag if General guidance starts with: `INTERNAL`, `NOT FOR CUSTOMER`, or similar
-- Must: exclude from Doc output, add to Needs Review, `type = "other"`
+- Flag if General guidance starts with: `INTERNAL` (incl. `INTERNAL ONLY`), `NOT FOR CUSTOMER`, `DO NOT SHARE`, `CONFIDENTIAL`
+- Route to Needs Review with `type = "internal-review"` and carry the full unredacted text as `answer`
+- Generator runs INTERNAL_REVIEW_PROMPT (agent-procedure gate + rewrite in one call)
+
+### Internal-Review Agent-Procedure Gate (single LLM call does both):
+1. **Detect:** if the source describes step-by-step agent operations on internal tools (Shopify admin, Zendesk, Gorgias, Intercom, Freshdesk, Google Drive admin, Gmail admin, backend dashboards, agent consoles, CRM, etc. — OR login/navigate/click instructions, sequential workflow steps, agent-directed language), reply EXACTLY: `AGENT_PROCEDURE_NO_REWRITE`
+2. **Rewrite (only if not agent procedure):** 2-paragraph customer-safe response, stripped of internal tool names and agent-directed language
+3. **Output handling:** refused → no Suggested Response, show "Agent procedure — manual review required." Otherwise show Original Source + Suggested Response side-by-side so reviewer compares
 
 ### RTO / Escalation Routing (after extraction):
 - **RTO** → Status column equals `"RTO"` (case-insensitive)
@@ -120,12 +126,14 @@ Company Details, Ordering and Checkout, Order Status, Stock and Supply Inquiry, 
 - Exactly 2 paragraphs per answer (no more, no less)
 - No "Q:" / "A:", no numbering, no markdown, no labels, no metadata
 - One blank line between FAQ entries
-- **Main output grouped by category** (fixed 20 order, skip empty categories)
-- **Needs Review sectioned in this order:** RTO → Escalation → Other (each grouped by category)
+- **Main output grouped by category** (fixed 20 order, skip empty categories). **Category headings are CENTERED** in DOCX (H1 with center alignment) and visually centered in TXT.
+- **Needs Review sectioned in this order:** RTO → Escalation → Internal Review → Other (each grouped by category; category H2 also centered)
+- **Every Needs Review item shows:** Title, Reason · Status · Tags · Keywords line, Original Source (with actual text), and — where applicable — Suggested Response (or agent-procedure notice)
+- **No auto-Suggested Response for:** Archived, Submitted, Suggested, No-valid-answer (they show original text only so reviewer can decide)
 - Files to generate:
   - `FAQ_DocStyle_Output.docx`
   - `FAQ_DocStyle_Output.txt`
-  - `FAQ_Needs_Review.xlsx` (columns: FAQ Title, Type, Category, Reason Flagged, Original Extracted Answer Source, Generated Response)
+  - `FAQ_Needs_Review.xlsx` columns: `FAQ Title, Type, Category, Reason Flagged, Status, Tags, Keywords, Source Column, Original Source Text, Generated Response`
   - `FAQ_Validation_Report.csv` (dev/internal only — adds Category, Type columns)
 
 ---

@@ -101,14 +101,15 @@ Internal Content Detection
 
 Check the General guidance column ONLY.
 If General guidance begins with any of the following (case-insensitive):
-  "INTERNAL"
+  "INTERNAL"          (includes "INTERNAL ONLY")
   "NOT FOR CUSTOMER"
-  or similar internal-only prefixes
+  "DO NOT SHARE"
+  "CONFIDENTIAL"
 
 → MUST:
-  exclude from Doc output
-  add to Needs Review file with reason = "Internal content"
-  type = "other"
+  exclude from main Doc output
+  route to Needs Review with type = "internal-review" (see §7d)
+  carry the full General guidance text so the agent-procedure gate can run
 
 7a. RTO / Escalation Routing
 
@@ -204,6 +205,37 @@ Classification rules (applied in this order):
   3. Fallback: if the LLM returns a label not in the fixed list → "OTHERS".
   4. Categories with zero FAQs after classification are omitted from output.
 
+7d. Internal-Review Flow (agent-procedure gate)
+
+Every item with type = "internal-review" is sent to OpenAI with the
+INTERNAL_REVIEW_PROMPT, which does BOTH detection and rewrite in a single call:
+
+  STEP 1 — Agent-Procedure Detection
+    The model looks for signs that the content is a step-by-step procedure
+    for SUPPORT AGENTS to operate internal tools, including:
+      - References to admin interfaces / internal platforms (Shopify admin,
+        Zendesk, Gorgias, Intercom, Freshdesk, Google Drive admin, Gmail admin,
+        backend dashboards, agent consoles, CRM, etc.)
+      - Instructions to log in, navigate, click, select, or copy from a tool
+      - Numbered/sequential agent workflow steps
+      - Agent-directed language ("the agent should", "for support staff")
+
+    If ANY of these signals are present, the model MUST reply with exactly:
+      AGENT_PROCEDURE_NO_REWRITE
+    and nothing else.
+
+  STEP 2 — Rewrite (only if NOT an agent procedure)
+    If the content is internal policy/context that can be sanitized, the
+    model rewrites it into the standard 2-paragraph customer-facing response,
+    stripping internal tool names, agent-directed language, and internal-only
+    phrasing. Same output rules as the main SYSTEM_PROMPT.
+
+  Handling in the output:
+    - Refused (agent procedure): suggested response is OMITTED; review item
+      shows the line "Agent procedure — manual review required."
+    - Rewritten: both the Original Source text AND the Suggested Response
+      are shown side by side so the reviewer can compare.
+
 8. Processing UI
 
 Show a visual progress bar with the following labeled stages (in order):
@@ -249,12 +281,15 @@ Rules:
 
 The main Doc output MUST be grouped by category:
 
-  - Each category appears as a Heading 1 (category name, no numbering)
+  - Each category appears as a Heading 1 (category name, no numbering),
+    **center-aligned** so the reviewer can scan them easily
   - Within each category, FAQs appear in source-file order
   - Categories appear in the fixed order listed in Section 7c
   - Categories with zero FAQs are skipped (not rendered)
 
 This applies to both FAQ_DocStyle_Output.docx and FAQ_DocStyle_Output.txt.
+In TXT, category headings are visually centered using a top/bottom bar
+(`━━━━━━━━━━━━━`) with padded spaces to approximate center alignment.
 
 10. Tone Enforcement
 
@@ -309,36 +344,57 @@ Primary Output
 Both files MUST be structured as:
 
   Section A — PROCESSED FAQs
-    Grouped by category (fixed order, §7c). Each category shown as Heading 1.
-    Within a category, each FAQ: title + 2-paragraph response.
+    Grouped by category (fixed order, §7c). Each category shown as centered
+    Heading 1. Within a category, each FAQ: title + 2-paragraph response.
 
   Section B — NEEDS REVIEW
-    Separator line, then three sub-sections in this order:
+    Separator line, then FOUR sub-sections in this order:
 
       1. NEEDS REVIEW — RTO
-         Grouped by category. Each FAQ: title + generated 2-paragraph response.
+         Grouped by category (centered H2). Each FAQ:
+           Title | Reason · Status · Tags · Keywords
+           Original Source (<column>): <actual text>
+           Suggested Response: <2-paragraph generated response>
+
       2. NEEDS REVIEW — ESCALATION
-         Grouped by category. Each FAQ: title + generated 2-paragraph response.
-      3. NEEDS REVIEW — OTHER
-         Grouped by category. Each FAQ: title + reason + original source
-         (no generated response for this group).
+         Same structure as RTO.
+
+      3. NEEDS REVIEW — INTERNAL (SHAREABLE?)
+         Same structure as RTO, PLUS:
+           - If §7d agent-procedure gate refused, the Suggested Response slot
+             is replaced with: "Agent procedure — manual review required."
+           - Otherwise, show both Original Source AND Suggested Response so
+             the reviewer can compare.
+
+      4. NEEDS REVIEW — OTHER
+         (Status-based exclusions + no-valid-answer cases)
+         Each FAQ:
+           Title | Reason · Status · Tags · Keywords
+           Original Source (<column>): <Reply 1 fallback if present>
+         No generated response — these rows are flagged but not rewritten.
 
 Secondary Output
   FAQ_Needs_Review.xlsx
   Columns (in this order):
     FAQ Title
-    Type                 (RTO | Escalation | Other)
-    Category             (one of the fixed 20)
+    Type                   (RTO | Escalation | Internal Review | Other)
+    Category               (one of the fixed 20)
     Reason Flagged
-    Original Extracted Answer Source
-    Generated Response   (blank for type = Other)
+    Status                 (from the Status column)
+    Tags                   (from column M)
+    Keywords               (from column I)
+    Source Column          (e.g. "Reply 1", "General guidance")
+    Original Source Text   (the actual text content)
+    Generated Response     (blank for Other; "(Agent procedure …)" for
+                            refused internal-review items)
 
-  Row order: RTO rows first, then Escalation, then Other.
+  Row order: RTO → Escalation → Internal Review → Other.
   Within each type, rows are grouped by category in the fixed order.
 
 Optional (Dev Only)
   FAQ_Validation_Report.csv
-  Adds columns: Category, Type
+  Adds columns: Category, Type. Preview note reads "Agent procedure — no
+  rewrite" for refused internal-review items.
 
 12. Google Drive
 
@@ -418,17 +474,23 @@ System is complete when:
 ✅ Client Code input collected before processing
 ✅ Columns auto-detected correctly
 ✅ Extraction logic works in correct priority order
-✅ Status-based exclusion (Archived / Submitted / Suggested) routes to Needs Review
-✅ Internal content (General guidance column) detected and excluded
+✅ Status-based exclusion (Archived / Submitted / Suggested) routes to Needs Review (type=other)
+✅ Internal content → type=internal-review; INTERNAL_REVIEW_PROMPT runs agent-procedure gate
+✅ Agent-procedure refusal shown as "Agent procedure — manual review required." (no rewrite)
+✅ Non-procedure internal content is sanitized into a Suggested Response for reviewer comparison
 ✅ RTO (Status column) routes to Needs Review, still generates a 2-paragraph response
 ✅ Escalation (keyword match in answer) routes to Needs Review, still generates a response
 ✅ Order-Related vs Pre-Sales detection selects the correct prompt
 ✅ Consent phrase appears verbatim (no paraphrasing) in Pre-Sales escalations
-✅ Every FAQ with a generated response is classified into one of the 20 fixed categories
+✅ Every FAQ is classified into one of the 20 fixed categories
 ✅ Classification is batched (up to 20 per OpenAI call) to save tokens
+✅ Tags fast-path assigns category without an LLM call when Tags is clean
 ✅ Rewrites run in parallel (concurrency ≤ 5) to reduce wall-clock time
-✅ Main Doc output is grouped by category (fixed order, empty categories skipped)
-✅ Needs Review is sectioned: RTO → Escalation → Other, each grouped by category
+✅ Main Doc output is grouped by category (centered H1, fixed order, empty categories skipped)
+✅ Needs Review is sectioned: RTO → Escalation → Internal Review → Other, each grouped by category
+✅ Every Needs Review item shows: Title, Reason, Status, Tags, Keywords, Original Source text,
+   and (when applicable) Suggested Response
+✅ Archived/Submitted/Suggested/No-answer items show original text but get NO Suggested Response
 ✅ Output format strictly followed (2 paragraphs, no labels, no metadata)
 ✅ Tone rules enforced (acknowledgment + reassurance always present)
 ✅ All files generated correctly
@@ -454,3 +516,7 @@ Escalation keyword appears in an order-tracking context (use email+name ask)
 Classification batch returns a label not in the fixed list (default to OTHERS)
 Category returned for an item has zero total members (still rendered if any item lands there)
 Both RTO and Escalation triggers match on the same FAQ (RTO takes precedence)
+Internal content that is an agent procedure (Shopify admin, Zendesk, etc. steps) → AGENT_PROCEDURE_NO_REWRITE, no Suggested Response
+Internal content that is just policy wording → sanitized rewrite, Original Source + Suggested Response both shown
+No-valid-answer row that has a non-GENERAL Reply 1 → show Reply 1 as Original Source in the review file
+Status = RTO on a row where Condition blocks extraction → still "No valid answer found", type=other
