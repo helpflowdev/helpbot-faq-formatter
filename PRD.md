@@ -266,6 +266,53 @@ INTERNAL_REVIEW_PROMPT, which does BOTH detection and rewrite in a single call:
     - Rewritten: both the Original Source text AND the Suggested Response
       are shown side by side so the reviewer can compare.
 
+7e. Push-Back Pattern (two main-output FAQs from one spreadsheet row)
+
+Some FAQs encode TWO distinct customer interactions in a single row:
+  - A valid customer-facing Reply (the direct answer), AND
+  - An INTERNAL agent note in General guidance that says "if the customer
+    pushes back / really wants specific info, gather their details and RTO."
+
+Instead of routing these to Needs Review (which loses the perfectly-good
+primary answer), the extractor emits TWO main-output FAQ entries per row.
+
+Detection (all must be true):
+  - Status is NOT "RTO"
+  - A valid Reply was extracted (§7 priority) — the Reply's own text has NO
+    escalation keyword (i.e., the primary answer is clean)
+  - General guidance contains any escalation signal (gather …details, RTO
+    as a word, or any ESCALATION_KEYWORDS from §7a)
+
+When detected, two items are pushed to the main faqs[] bucket:
+
+  1) Primary — type = "normal"
+       - Title: the original spreadsheet title (unchanged)
+       - Rewritten with SYSTEM_PROMPT (standard 2-paragraph rewrite of Reply)
+
+  2) Push-back — type = "pushback"
+       - forceConsent = true (always uses CONSENT_PROMPT substance)
+       - Carries primaryTitle, primaryAnswer (Reply text), and answer=GG text
+         as LLM context
+       - Rewritten with PUSHBACK_PROMPT, which returns BOTH a customer-voiced
+         derived title (e.g., "If you need to know stock availability before
+         placing your order") AND the 2-paragraph response in a single LLM
+         call. Paragraph 2 is the verbatim consent sentence.
+       - Generator parses the response: "TITLE: <title>" line + body
+       - The push-back's category is inherited from the primary (they're
+         always rendered adjacent in the same category section)
+
+Rendering:
+  - Main Doc output shows primary immediately followed by push-back, both
+    under the same category heading
+  - The push-back's Heading 2 is its derived title, NOT the placeholder
+  - No Needs Review entry is created for push-back rows
+
+Token impact: +1 LLM call per push-back row (combined title + body).
+
+Escalations where the Reply ITSELF carries the escalation language
+(e.g., "please raise a ticket") are NOT push-back — they still route to
+Needs Review → Escalation for human vetting (§7a).
+
 8. Processing UI
 
 Show a visual progress bar with the following labeled stages (in order):
@@ -527,6 +574,9 @@ System is complete when:
 ✅ Every Needs Review item shows: Title, Reason, Status, Tags, Keywords, Original Source text,
    and (when applicable) Suggested Response
 ✅ Archived/Submitted/Suggested/No-answer items show original text but get NO Suggested Response
+✅ Push-back pattern emits TWO main-output FAQs (primary + customer-voiced follow-up) when Reply is clean and GG carries an escalation signal
+✅ Push-back follow-up uses the consent phrase verbatim in paragraph 2; derived title is customer-voiced
+✅ Push-back inherits the primary's category so both render adjacent in the same section
 ✅ Output format strictly followed (2 paragraphs, no labels, no metadata)
 ✅ Tone rules enforced (acknowledgment + reassurance always present)
 ✅ All files generated correctly
@@ -556,3 +606,5 @@ Internal content that is an agent procedure (Shopify admin, Zendesk, etc. steps)
 Internal content that is just policy wording → sanitized rewrite, Original Source + Suggested Response both shown
 No-valid-answer row that has a non-GENERAL Reply 1 → show Reply 1 as Original Source in the review file
 Status = RTO on a row where Condition blocks extraction → still "No valid answer found", type=other
+Push-back row where LLM response omits the "TITLE:" line → fallback template: "If you need more specific information about <primary title>"
+Push-back row where primary and push-back would naturally classify to different categories → push-back inherits primary's category (keeps them adjacent)

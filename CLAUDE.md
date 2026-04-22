@@ -82,6 +82,13 @@ FAQ Formatter/
 - Route to Needs Review with `type = "internal-review"` and carry the full unredacted text as `answer`
 - Generator runs INTERNAL_REVIEW_PROMPT (agent-procedure gate + rewrite in one call)
 
+### Push-Back Pattern (PRD §7e) — TWO main-output FAQs from one row:
+When the Reply is **clean** (no escalation keywords in its own text) AND the General guidance carries an escalation signal (`gather …details`, `RTO`, or any ESCALATION_KEYWORDS), AND Status is NOT `RTO`, the extractor emits **two main-output FAQs**:
+1. **Primary** — `type = 'normal'`, original title, Reply content rewritten with SYSTEM_PROMPT
+2. **Push-back** — `type = 'pushback'`, derived customer-voiced title ("If you need X before Y"), body is acknowledgment + verbatim consent sentence. Generated via `PUSHBACK_PROMPT` in one call that returns `TITLE: <title>` + body. Push-back's category is copied from the primary so they render adjacent.
+
+No Needs Review entry is created for push-back rows. Escalations where the **Reply itself** directs to escalate still go to Needs Review → Escalation.
+
 ### Internal-Review Agent-Procedure Gate (single LLM call does both):
 1. **Detect:** if the source describes step-by-step agent operations on internal tools (Shopify admin, Zendesk, Gorgias, Intercom, Freshdesk, Google Drive admin, Gmail admin, backend dashboards, agent consoles, CRM, etc. — OR login/navigate/click instructions, sequential workflow steps, agent-directed language), reply EXACTLY: `AGENT_PROCEDURE_NO_REWRITE`
 2. **Rewrite (only if not agent procedure):** 2-paragraph customer-safe response, stripped of internal tool names and agent-directed language
