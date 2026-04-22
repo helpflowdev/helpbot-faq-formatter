@@ -23,6 +23,64 @@ const STAGE_MAP = {
   'Sending Slack Notification':      7,
 };
 
+// Fixed rendering order for category groups (matches PRD §7c / generator.js).
+const CATEGORY_ORDER = [
+  'Company Details',
+  'Ordering and Checkout',
+  'Order Status',
+  'Stock and Supply Inquiry',
+  'Returns, Refunds, Exchanges, and Warranties',
+  'Shipping Information',
+  'Competitor Comparison',
+  'Discounts and Promotions',
+  'Rewards and Affiliate Program',
+  'Product Information',
+  'Product Recommendation',
+  'Account and Subscription',
+  'Wholesale',
+  'Order Cancellation / Modification / Tracking',
+  'Do you sell? Do you have?',
+  'Services',
+  'Installation / Guide',
+  'Technical Queries',
+  'Miscellaneous',
+  'OTHERS',
+];
+
+// Needs Review section ordering (matches PRD §11 / generator.js).
+const REVIEW_SECTIONS = [
+  { key: 'rto', label: 'RTO' },
+  { key: 'escalation', label: 'Escalation' },
+  { key: 'internal-review', label: 'Internal Review' },
+  { key: 'other', label: 'Other' },
+];
+
+function groupByCategory(items) {
+  const map = new Map();
+  for (const item of items || []) {
+    const cat = item.category || 'OTHERS';
+    if (!map.has(cat)) map.set(cat, []);
+    map.get(cat).push(item);
+  }
+  return CATEGORY_ORDER
+    .filter(c => map.has(c))
+    .map(c => ({ category: c, items: map.get(c) }));
+}
+
+function partitionByType(items) {
+  const buckets = {};
+  for (const item of items || []) {
+    const key = item.type || 'other';
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(item);
+  }
+  return buckets;
+}
+
+function splitParagraphs(text) {
+  return String(text || '').split('\n\n').map(p => p.trim()).filter(Boolean);
+}
+
 export default function Home() {
   const [screen, setScreen] = useState('upload');
   const [sessionId, setSessionId] = useState(null);
@@ -362,18 +420,19 @@ export default function Home() {
                   contentEditable
                   suppressContentEditableWarning
                 >
-                  {results.faqEntries.map((entry, i) => {
-                    const paragraphs = entry.answer.split('\n\n').map(p => p.trim()).filter(Boolean);
-                    return (
-                      <div key={i}>
-                        <h1>{entry.title}</h1>
-                        {paragraphs.map((p, j) => (
-                          <p key={j}>{p}</p>
-                        ))}
-                        {i < results.faqEntries.length - 1 && <br />}
-                      </div>
-                    );
-                  })}
+                  {groupByCategory(results.faqEntries).map(({ category, items }) => (
+                    <div key={category} className="category-group">
+                      <h2 className="category-heading">{category}</h2>
+                      {items.map((entry, i) => (
+                        <div key={`${category}-${i}`} className="faq-entry">
+                          <h1>{entry.title}</h1>
+                          {splitParagraphs(entry.answer).map((p, j) => (
+                            <p key={j}>{p}</p>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -387,15 +446,87 @@ export default function Home() {
             </div>
             <div className="review-list">
               {results?.needsReviewEntries?.length > 0 ? (
-                results.needsReviewEntries.map((item, i) => (
-                  <div key={i} className="review-item">
-                    <h3 className="review-title">{item.title}</h3>
-                    <div className="review-meta">
-                      <span className="review-reason">{item.reason}</span>
-                      <span className="review-source">Source: {item.source}</span>
-                    </div>
-                  </div>
-                ))
+                (() => {
+                  const buckets = partitionByType(results.needsReviewEntries);
+                  const renderedSections = REVIEW_SECTIONS.filter(s => buckets[s.key]?.length > 0);
+                  if (renderedSections.length === 0) {
+                    return <div className="review-empty">No items flagged for review.</div>;
+                  }
+                  return renderedSections.map(({ key, label }) => {
+                    const items = buckets[key];
+                    return (
+                      <section key={key} className="review-section">
+                        <h3 className="review-section-heading">
+                          NEEDS REVIEW — {label.toUpperCase()} ({items.length})
+                        </h3>
+                        {groupByCategory(items).map(({ category, items: groupItems }) => (
+                          <div key={`${key}-${category}`} className="review-category-group">
+                            <h4 className="review-category-heading">{category}</h4>
+                            {groupItems.map((item, i) => (
+                              <div key={`${key}-${category}-${i}`} className="review-item">
+                                <h3 className="review-title">{item.title}</h3>
+
+                                <div className="review-meta-line">
+                                  {item.reason && (
+                                    <span><strong>Reason:</strong> {item.reason}</span>
+                                  )}
+                                  {item.status && (
+                                    <span><strong>Status:</strong> {item.status}</span>
+                                  )}
+                                  {item.tags && (
+                                    <span><strong>Tags:</strong> {item.tags}</span>
+                                  )}
+                                  {item.keywords && (
+                                    <span><strong>Keywords:</strong> {item.keywords}</span>
+                                  )}
+                                </div>
+
+                                {item.originalText ? (
+                                  <div className="review-block review-original">
+                                    <div className="review-block-label">
+                                      Original Source ({item.source || 'source'})
+                                    </div>
+                                    {splitParagraphs(item.originalText).map((p, j) => (
+                                      <p key={j}>{p}</p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="review-block review-original review-original-empty">
+                                    <em>(no source text available in this row)</em>
+                                  </div>
+                                )}
+
+                                {item.internalNote && (
+                                  <div className="review-block review-agent-note">
+                                    <div className="review-block-label">Agent Note (General guidance)</div>
+                                    <p>{item.internalNote}</p>
+                                  </div>
+                                )}
+
+                                {item.agentProcedure && (
+                                  <div className="review-block review-agent-procedure">
+                                    <strong>Agent procedure — manual review required.</strong> This content
+                                    appears to describe internal tool usage for support agents and cannot
+                                    be safely rewritten as customer-facing.
+                                  </div>
+                                )}
+
+                                {item.generatedAnswer && !item.agentProcedure && (
+                                  <div className="review-block review-suggested">
+                                    <div className="review-block-label">Suggested Response</div>
+                                    {splitParagraphs(item.generatedAnswer).map((p, j) => (
+                                      <p key={j}>{p}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </section>
+                    );
+                  });
+                })()
               ) : (
                 <div className="review-empty">No items flagged for review.</div>
               )}

@@ -101,6 +101,14 @@ export async function GET(request) {
             source: item.source,
             type: item.type,
             category: item.category,
+            status: item.status || '',
+            tags: item.tags || '',
+            keywords: item.keywords || '',
+            // Original source text: for rto/escalation/internal-review it's the
+            // extracted answer; for other-type rows it's the Reply 1 fallback.
+            originalText: item.answer || item.originalText || '',
+            internalNote: item.internalNote || '',
+            agentProcedure: item.agentProcedure === true,
             generatedAnswer: item.formattedAnswer || null,
           })),
         });
